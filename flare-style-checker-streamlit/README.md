@@ -1,64 +1,39 @@
-# Flare Style Checker — Streamlit
+# Flare Style Checker ✨  
 
-Scan **MadCap Flare HTML** for MSTP-style issues and grammar (LanguageTool), review suggestions, accept/reject, and download the cleaned file.
+A **Streamlit-powered tool** that scans your **MadCap Flare HTML topics** for:  
+- Grammar issues  
+- Microsoft Style Guide (MSTP) violations  
+- Readability improvements  
 
-## Features
-- Upload a single Flare HTML topic (`.htm`/`.html`)
-- Built-in **MSTP rules** (regex-based) — easily extendable in `mstp_rules.py`
-- **Grammar checks** via LanguageTool Public API (optional; rate-limited)
-- Review suggestions in an editable table (toggle **apply** per change)
-- Apply accepted changes and **download cleaned HTML**
-- See a **unified diff** preview
+This project helps technical writers maintain **consistent, professional, and error-free documentation**.  
 
-## Local run
+---
 
-```bash
-# 1) Create and activate a virtual environment (recommended)
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
+## 🚀 Demo  
 
-# 2) Install requirements
-pip install -r requirements.txt
+👉 [Open in Streamlit](https://flare-style-checker.streamlit.app/)  
 
-# 3) Run the Streamlit app
-streamlit run streamlit_app.py
-```
+---
 
-## Deploy to Streamlit Community Cloud
+## 📸 Screenshot  
 
-1. Push this folder to a GitHub repo (e.g., `nikhil/flare-style-checker-streamlit`).
-2. Go to https://share.streamlit.io/ → **New app** → select your repo.
-3. Set **Main file path**: `streamlit_app.py`
-4. Deploy. Done! You'll get a public URL to share.
+_Add a screenshot here once deployed (optional)._  
 
-> Note: Grammar uses the LanguageTool Public API by default through `language_tool_python`. It may be rate-limited. You can disable Grammar in the sidebar or point to a self-hosted LanguageTool server by swapping to `LanguageTool('en-US')` and running the LT server separately.
+---
 
-## Extend MSTP rules
-Edit `mstp_rules.py` and add entries:
-```py
-{
-  "id": "MSTP.009",
-  "desc": "Your rule description",
-  "pattern": re.compile(r"regex", re.IGNORECASE),
-  "repl": "replacement",
-}
-```
+## 🔧 Features  
 
-## Structure
-```
-.
-├── streamlit_app.py
-├── processors.py
-├── mstp_rules.py
-├── requirements.txt
-└── README.md
-```
+- ✅ Upload **MadCap Flare HTML topics**  
+- ✅ Detect **grammar issues** using spaCy + LanguageTool  
+- ✅ Check **MSTP style rules** (custom rules)  
+- ✅ Accept/Reject suggested changes in the GUI  
+- ✅ Save cleaned files directly  
 
-## Flask + React (Alternative)
-If you later want a React UI on **GitHub Pages** and an API backend:
-- Host React (Vite/CRA) on GitHub Pages.
-- Deploy Flask (with your MSTP + grammar logic) on **Render** or **Railway**.
-- Expose endpoints like `/api/check` and `/api/apply`. The React app uploads the HTML, renders suggestions, and calls the API to apply changes.
-```
+---
+
+## 🛠 Installation (Local Development)  
+
+1. Clone the repository:  
+   ```bash
+   git clone https://github.com/shorichetan/flare-style-checker-streamlit.git
+   cd flare-style-checker-streamlit

@@ -13,16 +13,17 @@ try:
 except Exception:
     _lt = None
 
+
 @dataclass
 class TextNodeRef:
     node: NavigableString
     path: str  # CSS-like path for display
 
+
 def _node_path(node) -> str:
     parts = []
     curr = node.parent
     while curr and curr.name:
-        # Build a simple breadcrumb
         name = curr.name
         if curr.get("id"):
             name += f"#{curr.get('id')}"
@@ -33,6 +34,7 @@ def _node_path(node) -> str:
         curr = curr.parent
     return " > ".join(reversed(parts))
 
+
 def extract_text_nodes(soup: BeautifulSoup) -> List[TextNodeRef]:
     """Get navigable strings that look like user-facing text."""
     nodes = []
@@ -42,28 +44,29 @@ def extract_text_nodes(soup: BeautifulSoup) -> List[TextNodeRef]:
             continue
         if text.parent and text.parent.name in blacklist:
             continue
-        # Skip empty/whitespace-only nodes
         raw = str(text)
         if not raw or raw.isspace():
             continue
-        # Heuristic: ignore very short bits like single punctuation
         if len(raw.strip()) < 2:
             continue
         nodes.append(TextNodeRef(node=text, path=_node_path(text)))
     return nodes
 
+
 def _snippet(s: str, maxlen: int = 120) -> str:
     s = s.replace("\n", " ").strip()
     return s if len(s) <= maxlen else s[:maxlen] + "…"
+
 
 def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
     suggestions = []
     for ref in nodes:
         original = str(ref.node)
         for rule in MSTP_RULES:
-            # For each rule, find all non-overlapping replacements
+            # Search all matches
             for m in rule["pattern"].finditer(original):
                 before = m.group(0)
+                # Replace inside the matched span only
                 after = rule["pattern"].sub(rule["repl"], before)
                 if before == after:
                     continue
@@ -77,6 +80,7 @@ def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
                     "apply": False
                 })
     return dedupe_suggestions(suggestions)
+
 
 def apply_langtool_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
     if _lt is None:
@@ -94,7 +98,6 @@ def apply_langtool_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
             if not m.replacements:
                 continue
             before = text[m.offset:m.offset + m.errorLength]
-            # choose top suggestion only
             after = m.replacements[0]
             if before.strip() == after.strip() or not before.strip():
                 continue
@@ -109,6 +112,7 @@ def apply_langtool_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
             })
     return dedupe_suggestions(suggestions)
 
+
 def dedupe_suggestions(suggs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
     out = []
@@ -120,17 +124,16 @@ def dedupe_suggestions(suggs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         out.append(s)
     return out
 
+
 def apply_selected_changes(soup: BeautifulSoup, df) -> Tuple[str, int]:
-    """Apply selected changes to the soup in-place. We replace occurrences within the specific path nodes."""
+    """Apply selected changes to the soup in-place."""
     changes = df[df.get("apply", False) == True].to_dict("records")
     applied = 0
 
-    # Build mapping path -> list of (before, after)
     by_path = {}
     for c in changes:
         by_path.setdefault(c["path"], []).append((c["before"], c["after"]))
 
-    # Traverse again to ensure path alignment
     for text in soup.find_all(string=True):
         if not isinstance(text, NavigableString):
             continue
@@ -141,22 +144,21 @@ def apply_selected_changes(soup: BeautifulSoup, df) -> Tuple[str, int]:
         original = str(text)
         new_text = original
         for before, after in by_path[path]:
-            # replace only first occurrence per suggestion to avoid over-applying
             new_text = new_text.replace(before, after, 1)
         if new_text != original:
             text.replace_with(new_text)
-            # count how many replacements took effect
-            for before, after in by_path[path]:
-                if before in original:
-                    applied += 1
+            applied += 1
 
     return str(soup), applied
 
+
 def render_diff_html(before_html: str, after_html: str) -> str:
-    """Return a simple HTML render of a unified diff."""
     before_lines = before_html.splitlines(keepends=False)
     after_lines = after_html.splitlines(keepends=False)
-    diff = difflib.unified_diff(before_lines, after_lines, fromfile="original.html", tofile="cleaned.html", lineterm="")
+    diff = difflib.unified_diff(
+        before_lines, after_lines,
+        fromfile="original.html", tofile="cleaned.html", lineterm=""
+    )
     html = ["<pre style='font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; white-space: pre-wrap'>"]
     for line in diff:
         if line.startswith("+") and not line.startswith("+++"):
