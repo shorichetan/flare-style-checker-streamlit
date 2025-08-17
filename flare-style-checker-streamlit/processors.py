@@ -1,6 +1,8 @@
 # processors.py
+# -------------------------------
 # This file contains all the functions that handle HTML processing,
 # checking grammar, applying MSTP rules, and updating the HTML.
+# -------------------------------
 
 import re
 import difflib  # For showing differences between original and cleaned HTML
@@ -18,7 +20,7 @@ try:
     import language_tool_python
     _lt = language_tool_python.LanguageToolPublicAPI('en-US')
 except Exception:
-    _lt = None  # If LanguageTool is not installed, we just skip grammar checks
+    _lt = None  # If LanguageTool is not installed, grammar checks will be skipped
 
 
 # -------------------------------
@@ -60,9 +62,10 @@ def _node_path(node) -> str:
 def extract_text_nodes(soup: BeautifulSoup) -> List[TextNodeRef]:
     """
     Find all meaningful text nodes in the HTML, skipping scripts, styles, and very short text.
+    Returns a list of TextNodeRef objects.
     """
     nodes = []
-    blacklist = {"script", "style"}
+    blacklist = {"script", "style"}  # Ignore these tags
     for text in soup.find_all(string=True):
         if not isinstance(text, NavigableString):
             continue
@@ -86,9 +89,20 @@ def _snippet(s: str, maxlen: int = 120) -> str:
 # -------------------------------
 # MSTP RULES CHECK
 # -------------------------------
+def suggest_active_voice(text: str) -> str:
+    """
+    Safely handle passive voice:
+    - If auto-rewriting fails or is unsafe, return original text with a note.
+    """
+    # For now, we do not attempt automatic rewriting.
+    # Append a note for the user instead.
+    return text + " (Passive voice detected – consider rewriting in active voice)"
+
+
 def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
     """
     Apply MSTP rules to all text nodes and collect suggestions.
+    Returns a list of dictionaries, each containing before/after text and rule info.
     """
     suggestions = []
     for ref in nodes:
@@ -96,9 +110,17 @@ def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
         for rule in MSTP_RULES:
             for m in rule["pattern"].finditer(original):
                 before = m.group(0)
-                after = rule["pattern"].sub(rule["repl"], before)
+
+                # Special handling for passive voice
+                if rule["id"] == "avoid-passive":
+                    after = suggest_active_voice(before)
+                else:
+                    after = rule["pattern"].sub(rule["repl"], before)
+
+                # Skip if no change
                 if before == after:
                     continue
+
                 suggestions.append({
                     "type": "MSTP",
                     "rule_id": rule["id"],
@@ -106,8 +128,9 @@ def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
                     "path": ref.path,
                     "before": before,
                     "after": after,
-                    "apply": False
+                    "apply": False  # Default, user can change in GUI
                 })
+
     return dedupe_suggestions(suggestions)
 
 
@@ -117,6 +140,7 @@ def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
 def apply_langtool_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
     """
     Use LanguageTool to find grammar mistakes in text nodes.
+    Returns a list of suggestions.
     """
     if _lt is None:
         return []
@@ -164,17 +188,17 @@ def dedupe_suggestions(suggs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 # -------------------------------
-# APPLY CHANGES
+# APPLY CHANGES TO HTML
 # -------------------------------
 def apply_selected_changes(soup: BeautifulSoup, df) -> Tuple[str, int]:
     """
-    Apply the changes that the user has selected to the HTML.
+    Apply the changes that the user has selected in the GUI to the HTML.
     Returns the updated HTML as a string and the number of changes applied.
     """
     changes = df[df.get("apply", False) == True].to_dict("records")
     applied = 0
 
-    # Group changes by path
+    # Group changes by path for easy replacement
     by_path = {}
     for c in changes:
         by_path.setdefault(c["path"], []).append((c["before"], c["after"]))
@@ -212,7 +236,7 @@ def render_diff_html(before_html: str, after_html: str) -> str:
     )
     html = ["<pre style='font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; white-space: pre-wrap'>"]
     for line in diff:
-        if line.startswith("+") and not line.startswith("+++"):
+        if line.startswith("+") and not line.startswith("+++") :
             html.append(f"<span style='background:#eaffea'>{line}</span>")
         elif line.startswith("-") and not line.startswith("---"):
             html.append(f"<span style='background:#ffecec'>{line}</span>")
@@ -220,3 +244,30 @@ def render_diff_html(before_html: str, after_html: str) -> str:
             html.append(line)
     html.append("</pre>")
     return "\n".join(html)
+
+
+# -------------------------------
+# MAIN PROCESS FUNCTION
+# -------------------------------
+def process_html(soup: BeautifulSoup):
+    """
+    Process the BeautifulSoup object:
+    - Extract all text nodes
+    - Apply MSTP rules
+    - Apply LanguageTool grammar checks
+    Returns a pandas DataFrame of suggested changes.
+    """
+    import pandas as pd
+
+    nodes = extract_text_nodes(soup)
+    suggestions = apply_mstp_rules_to_nodes(nodes)
+
+    # Apply LanguageTool
+    grammar_suggestions = apply_langtool_to_nodes(nodes)
+    all_suggestions = suggestions + grammar_suggestions
+
+    df = pd.DataFrame(all_suggestions)
+    if not df.empty:
+        df["apply"] = True
+
+    return df
