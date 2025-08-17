@@ -85,6 +85,22 @@ def _snippet(s: str, maxlen: int = 120) -> str:
     s = s.replace("\n", " ").strip()
     return s if len(s) <= maxlen else s[:maxlen] + "…"
 
+def enforce_short_sentences(text: str, max_words: int = 20) -> str:
+    """
+    Flag or break long sentences exceeding max_words.
+    Returns text with long sentences split or highlighted for review.
+    """
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    new_sentences = []
+    for s in sentences:
+        word_count = len(s.split())
+        if word_count > max_words:
+            # Split into smaller chunks
+            parts = re.findall(r'.{1,%d}(?:\s|$)' % max_words, s)
+            new_sentences.extend([p.strip() for p in parts if p.strip()])
+        else:
+            new_sentences.append(s)
+    return ' '.join(new_sentences)
 
 # -------------------------------
 # MSTP RULES CHECK
@@ -107,29 +123,38 @@ def apply_mstp_rules_to_nodes(nodes: List[TextNodeRef]) -> List[Dict[str, Any]]:
     suggestions = []
     for ref in nodes:
         original = str(ref.node)
+        
+        # 1. Existing MSTP rules
         for rule in MSTP_RULES:
             for m in rule["pattern"].finditer(original):
                 before = m.group(0)
-
-                # Special handling for passive voice
                 if rule["id"] == "avoid-passive":
                     after = suggest_active_voice(before)
                 else:
                     after = rule["pattern"].sub(rule["repl"], before)
-
-                # Skip if no change
-                if before == after:
-                    continue
-
-                suggestions.append({
-                    "type": "MSTP",
-                    "rule_id": rule["id"],
-                    "description": rule["desc"],
-                    "path": ref.path,
-                    "before": before,
-                    "after": after,
-                    "apply": False  # Default, user can change in GUI
-                })
+                if before != after:
+                    suggestions.append({
+                        "type": "MSTP",
+                        "rule_id": rule["id"],
+                        "description": rule["desc"],
+                        "path": ref.path,
+                        "before": before,
+                        "after": after,
+                        "apply": False
+                    })
+        
+        # 2. New "short sentences" pseudo-rule
+        shortened = enforce_short_sentences(original, max_words=20)
+        if shortened != original:
+            suggestions.append({
+                "type": "MSTP",
+                "rule_id": "short-sentences",
+                "description": f"Sentence exceeds 20 words, consider splitting.",
+                "path": ref.path,
+                "before": original,
+                "after": shortened,
+                "apply": False
+            })
 
     return dedupe_suggestions(suggestions)
 
