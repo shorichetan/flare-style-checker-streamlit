@@ -1,6 +1,8 @@
-streamlit>=1.36
-beautifulsoup4>=4.12
-html5lib>=1.1
-lxml>=5.2
-pandas>=2.2
-language-tool-python>=2.7.1
+streamlit==1.37.1
+beautifulsoup4==4.12.3
+html5lib==1.1
+lxml==5.2.2
+pandas==2.2.2
+language-tool-python==2.7.1
+spacy==3.7.5
+
